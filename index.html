@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Drink Water Reminder</title>
+<meta name="description" content="Reminds you to drink water as often as you type.">
+<meta name="theme-color" content="#0d47a1">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+  :root { --ink:#06285c; --card:rgba(255,255,255,0.92); --blue:#1e88e5; --blue2:#0d47a1; --aqua:#4fc3f7; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; min-height:100%; }
+  body { font-family:'Segoe UI', system-ui, Arial, sans-serif; color:var(--ink); background:linear-gradient(180deg,#e3f6ff 0%,#a8defa 55%,#5bb8f0 100%); background-attachment:fixed;
+    display:flex; flex-direction:column; align-items:center; padding:max(16px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom)); }
+  main { width:min(440px, 100%); display:flex; flex-direction:column; align-items:center; }
+  h1 { margin:6px 0 0; font-size:28px; color:var(--blue2); }
+  .tag { margin:2px 0 8px; opacity:0.75; }
+
+  #glass { width:min(250px, 66vw); height:auto; margin:6px 0 0; filter:drop-shadow(0 10px 18px rgba(13,71,161,0.25)); }
+  #level { transition:transform 0.9s cubic-bezier(.3,.8,.3,1); }
+  .wave { animation:wave 3.2s linear infinite; }
+  .wave2 { animation:wave 5.5s linear infinite reverse; opacity:0.55; }
+  @keyframes wave { from { transform:translateX(0); } to { transform:translateX(-100px); } }
+  #glassTxt { font-size:34px; font-weight:800; fill:#fff; paint-order:stroke; stroke:rgba(13,71,161,0.55); stroke-width:4px; }
+  #glassSub { font-size:13px; font-weight:600; fill:#fff; paint-order:stroke; stroke:rgba(13,71,161,0.55); stroke-width:3px; }
+
+  .btn { border:0; border-radius:16px; font:inherit; font-weight:800; cursor:pointer; transition:transform .08s; }
+  .btn:active { transform:scale(0.97); }
+  #drinkBtn { margin-top:10px; padding:14px 26px; font-size:18px; background:linear-gradient(180deg,#42a5f5,#1e88e5); color:#fff; box-shadow:0 6px 14px rgba(30,136,229,0.4); }
+  #undoBtn { background:none; border:0; color:var(--blue2); opacity:0.7; font:inherit; font-size:13px; margin-top:6px; cursor:pointer; text-decoration:underline; }
+
+  .card { width:100%; margin-top:16px; background:var(--card); border-radius:20px; padding:16px 18px; box-shadow:0 8px 22px rgba(13,71,161,0.15); }
+  .card label { display:block; font-weight:700; margin-bottom:8px; }
+  #interval { width:100%; font:inherit; font-size:26px; font-weight:700; text-align:center; padding:12px; border-radius:14px; border:2px solid #b7dcf5; background:#fff; color:var(--ink); outline:none; }
+  #interval:focus { border-color:var(--blue); box-shadow:0 0 0 4px rgba(30,136,229,0.18); }
+  #interval.bad { border-color:#e53935; }
+  #preview { min-height:24px; margin-top:8px; text-align:center; font-weight:600; color:#0b6bcb; }
+  #preview.err { color:#d32f2f; }
+  #hintLine { text-align:center; font-size:12.5px; opacity:0.7; margin-top:2px; }
+  #startBtn { width:100%; margin-top:12px; padding:16px; font-size:20px; color:#fff; background:linear-gradient(180deg,#26c6da,#00acc1); box-shadow:0 6px 14px rgba(0,172,193,0.4); }
+  #startBtn.running { background:linear-gradient(180deg,#ff7043,#e64a19); box-shadow:0 6px 14px rgba(230,74,25,0.35); }
+  #status { margin-top:12px; text-align:center; font-weight:700; }
+  #countdown { font-size:34px; font-variant-numeric:tabular-nums; color:var(--blue2); display:block; }
+  #notice { margin-top:8px; font-size:13px; text-align:center; padding:8px 10px; border-radius:12px; background:#fff8e1; color:#6d4c00; display:none; }
+  #notice.show { display:block; }
+  .small { background:none; border:0; color:var(--blue2); font:inherit; font-size:13px; text-decoration:underline; cursor:pointer; margin-top:10px; opacity:0.85; }
+  #installBtn { display:none; margin-top:12px; padding:12px 20px; background:#fff; color:var(--blue2); box-shadow:0 4px 10px rgba(13,71,161,0.2); }
+  #toast { position:fixed; left:50%; top:-120px; transform:translateX(-50%); z-index:10; background:#0d47a1; color:#fff; padding:14px 20px; border-radius:16px; font-weight:700; box-shadow:0 10px 26px rgba(0,0,0,0.3); transition:top .5s cubic-bezier(.2,1.2,.4,1); text-align:center; max-width:92%; }
+  #toast.show { top:max(14px, env(safe-area-inset-top)); }
+  footer { margin-top:18px; font-size:12px; opacity:0.65; text-align:center; }
+  footer a { color:inherit; }
+  @media (prefers-reduced-motion: reduce) { .wave, .wave2 { animation:none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>💧 Drink Water</h1>
+  <div class="tag">Your friendly water reminder</div>
+
+  <svg id="glass" viewBox="0 0 200 200" aria-label="Glasses of water today">
+    <defs>
+      <clipPath id="clip"><circle cx="100" cy="100" r="92"/></clipPath>
+      <linearGradient id="wg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6fd0ff"/><stop offset="1" stop-color="#1e88e5"/></linearGradient>
+      <radialGradient id="bg" cx="40%" cy="30%" r="80%"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d6efff"/></radialGradient>
+    </defs>
+    <circle cx="100" cy="100" r="96" fill="url(#bg)" stroke="#ffffff" stroke-width="4"/>
+    <g clip-path="url(#clip)">
+      <g id="level" style="transform:translateY(200px)">
+        <path class="wave2" d="M-100 4 Q-75 -8 -50 4 T0 4 T50 4 T100 4 T150 4 T200 4 T250 4 V230 H-100 Z" fill="#8fdcff"/>
+        <path class="wave" d="M-100 0 Q-75 -10 -50 0 T0 0 T50 0 T100 0 T150 0 T200 0 T250 0 V230 H-100 Z" fill="url(#wg)"/>
+      </g>
+    </g>
+    <circle cx="100" cy="100" r="96" fill="none" stroke="#9ed8fb" stroke-width="3"/>
+    <text id="glassTxt" x="100" y="108" text-anchor="middle">0 / 8</text>
+    <text id="glassSub" x="100" y="132" text-anchor="middle">glasses today</text>
+  </svg>
+
+  <button class="btn" id="drinkBtn">🥤 I drank a glass</button>
+  <button id="undoBtn">undo last glass</button>
+
+  <section class="card">
+    <label for="interval">Remind me every…</label>
+    <input id="interval" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="type a time" aria-describedby="preview">
+    <div id="preview" aria-live="polite"></div>
+    <div id="hintLine">Type any time, like <b>30</b>, <b>45 min</b>, <b>1 hour</b> or <b>1:30</b></div>
+    <button class="btn" id="startBtn">Start reminders</button>
+    <div id="status" aria-live="polite"></div>
+    <div id="notice"></div>
+  </section>
+
+  <button class="btn" id="installBtn">📲 Install the app</button>
+  <button class="small" id="testBtn">Send me a test reminder now</button>
+  <footer>Reminders are only for fun and health tips, not medical advice. · <a href="privacy.html">Privacy</a></footer>
+</main>
+<div id="toast" role="status"></div>
+
+<script>
+'use strict';
+// ====================== State ======================
+const KEY = 'waterReminderV1';
+let S = { interval: 0, running: false, nextAt: 0, count: 0, day: '', goal: 8, sound: true, text: '' };
+try { const raw = JSON.parse(localStorage.getItem(KEY) || 'null'); if (raw) S = Object.assign(S, raw); } catch (e) {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+const $ = id => document.getElementById(id);
+const today = () => { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
+
+// The Android app (made with Capacitor) can schedule reminders that arrive even when the app is closed.
+const NATIVE = !!(window.Capacitor && typeof Capacitor.isNativePlatform === 'function' && Capacitor.isNativePlatform());
+const LN = () => (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.LocalNotifications) || null;
+
+const MESSAGES = [
+  ['Time to drink water! 💧', 'Take a few sips, your body will say thanks.'],
+  ['Hydration check! 🥤', 'Have a glass of water right now.'],
+  ['Water break! 🚰', 'A glass of water keeps you fresh and focused.'],
+  ['Sip, sip, hooray! 💦', 'Time for a glass of water.'],
+  ['Hey! Your water is waiting 💙', 'Drink some water and keep going.']
+];
+const pickMessage = () => MESSAGES[Math.floor(Math.random() * MESSAGES.length)];
+
+// ====================== Reading the time the user types ======================
+// Accepts things like: 30   45 min   1 hour   1.5 hours   2h   1h 30m   1:30   half an hour
+function describe(mins) {
+  const h = Math.floor(mins / 60), m = mins % 60, parts = [];
+  if (h) parts.push(h + (h === 1 ? ' hour' : ' hours'));
+  if (m) parts.push(m + (m === 1 ? ' minute' : ' minutes'));
+  return parts.join(' ');
+}
+function parseInterval(text) {
+  let s = String(text || '').toLowerCase().replace(/,/g, '.').trim();
+  if (!s) return { ok: false, empty: true, error: 'Type how often you want to be reminded.' };
+  let mins = 0, m;
+  if (/^half( an?)? hour$/.test(s)) mins = 30;
+  else if ((m = s.match(/^(\d{1,2}):(\d{2})$/))) mins = +m[1] * 60 + +m[2];
+  else {
+    s = s.replace(/\band\b|&|\+/g, ' ');
+    const re = /(\d+(?:\.\d+)?)\s*([a-z]*)/g; const toks = []; let t;
+    while ((t = re.exec(s))) toks.push({ n: parseFloat(t[1]), u: t[2] });
+    if (!toks.length) return { ok: false, error: "I don't understand that. Try 30, 45 min or 1 hour." };
+    // anything that is not a number+unit makes it invalid
+    const rest = s.replace(re, '').replace(/\s+/g, '');
+    if (rest) return { ok: false, error: "I don't understand \"" + text.trim() + '". Try 30, 45 min or 1 hour.' };
+    for (const k of toks) {
+      if (!/^(|h|hr|hrs|hour|hours|m|min|mins|minute|minutes)$/.test(k.u)) return { ok: false, error: "I don't know \"" + k.u + '". Use min or hour.' };
+      if (k.u === '' && toks.length > 1) return { ok: false, error: 'Add min or hour after each number, like 1 hour 30 min.' };
+      mins += k.u.startsWith('h') ? k.n * 60 : k.n;
+    }
+  }
+  mins = Math.round(mins);
+  if (mins < 1) return { ok: false, error: 'Please type at least 1 minute.' };
+  if (mins > 1440) return { ok: false, error: 'The longest time is 24 hours.' };
+  return { ok: true, minutes: mins };
+}
+
+// ====================== Sound ======================
+let ac = null;
+function tone(f1, f2, dur, vol) {
+  if (!S.sound) return;
+  try {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+    o.type = 'sine'; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + dur + 0.05);
+  } catch (e) {}
+}
+const blub = () => { tone(380, 760, 0.16, 0.14); setTimeout(() => tone(520, 900, 0.14, 0.1), 120); };
+const chime = () => [659, 784, 988].forEach((f, i) => setTimeout(() => tone(f, f, 0.35, 0.12), i * 140));
+
+// ====================== Screen ======================
+let toastTimer = 0;
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 4200); }
+function notice(msg) { const n = $('notice'); n.textContent = msg || ''; n.classList.toggle('show', !!msg); }
+function fmtCountdown(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  const p = n => String(n).padStart(2, '0');
+  return (h ? h + ':' + p(m) : m) + ':' + p(sec);
+}
+function render() {
+  if (S.day !== today()) { S.day = today(); S.count = 0; save(); }
+  const pct = Math.min(1, S.count / S.goal);
+  $('level').style.transform = 'translateY(' + (200 - 192 * pct) + 'px)';
+  $('glassTxt').textContent = S.count + ' / ' + S.goal;
+  $('glassSub').textContent = S.count >= S.goal ? 'goal reached! 🎉' : 'glasses today';
+  $('startBtn').textContent = S.running ? 'Stop reminders' : 'Start reminders';
+  $('startBtn').classList.toggle('running', S.running);
+  $('undoBtn').style.visibility = S.count > 0 ? 'visible' : 'hidden';
+  renderStatus();
+}
+function renderStatus() {
+  const el = $('status');
+  if (!S.running) { el.textContent = 'Reminders are off'; return; }
+  el.innerHTML = 'Every ' + describe(S.interval) + '<span id="countdown">' + fmtCountdown(S.nextAt - Date.now()) + '</span>until your next reminder';
+}
+function updatePreview() {
+  const v = $('interval').value, p = $('preview');
+  if (!v.trim()) { p.textContent = ''; p.classList.remove('err'); $('interval').classList.remove('bad'); return null; }
+  const r = parseInterval(v);
+  p.classList.toggle('err', !r.ok); $('interval').classList.toggle('bad', !r.ok);
+  p.textContent = r.ok ? '✓ Every ' + describe(r.minutes) : r.error;
+  return r;
+}
+$('interval').addEventListener('input', () => { S.text = $('interval').value; save(); updatePreview(); });
+$('interval').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('startBtn').click(); } });
+
+// ====================== Glasses ======================
+$('drinkBtn').onclick = () => {
+  S.count++; save(); render(); blub(); if (navigator.vibrate) navigator.vibrate(30);
+  if (S.count === S.goal) { chime(); toast('🎉 You reached your goal of ' + S.goal + ' glasses!'); }
+};
+$('undoBtn').onclick = () => { if (S.count > 0) { S.count--; save(); render(); } };
+
+// ====================== Reminders ======================
+const CH = 'water-reminders', MAX_PENDING = 240;
+
+// Android app: schedule the next reminders with the phone's alarm system, so they arrive even when the app is closed.
+async function scheduleNative(mins, firstAt) {
+  const plugin = LN(); if (!plugin) { notice('Reminders are not available on this phone.'); return false; }
+  let perm = await plugin.checkPermissions();
+  if (perm.display !== 'granted') perm = await plugin.requestPermissions();
+  if (perm.display !== 'granted') { notice('Please allow notifications in your phone settings, or reminders cannot show up.'); return false; }
+  try { await plugin.createChannel({ id: CH, name: 'Water reminders', description: 'Reminders to drink water', importance: 4, visibility: 1, vibration: true }); } catch (e) {}
+  try { const pend = await plugin.getPending(); if (pend.notifications && pend.notifications.length) await plugin.cancel({ notifications: pend.notifications }); } catch (e) {}
+  const notifications = [];
+  let at = firstAt || (Date.now() + mins * 60000);
+  for (let i = 0; i < MAX_PENDING; i++) {
+    const msg = pickMessage();
+    notifications.push({ id: i + 1, title: msg[0], body: msg[1], channelId: CH, smallIcon: 'ic_stat_water', schedule: { at: new Date(at), allowWhileIdle: true } });
+    at += mins * 60000;
+  }
+  await plugin.schedule({ notifications });
+  return true;
+}
+async function cancelNative() {
+  const plugin = LN(); if (!plugin) return;
+  try { const pend = await plugin.getPending(); if (pend.notifications && pend.notifications.length) await plugin.cancel({ notifications: pend.notifications }); } catch (e) {}
+}
+
+// Website: browser notifications work while this page is open (or installed as an app).
+async function webPermission() {
+  if (!('Notification' in window)) return 'unsupported';
+  if (Notification.permission === 'default') { try { await Notification.requestPermission(); } catch (e) {} }
+  return Notification.permission;
+}
+async function showWebNotification(title, body) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return false;
+  const opts = { body, icon: 'icon-192.png', badge: 'icon-192.png', tag: 'water', renotify: true, vibrate: [120, 60, 120] };
+  try { const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration(); if (reg) { await reg.showNotification(title, opts); return true; } } catch (e) {}
+  try { new Notification(title, opts); return true; } catch (e) { return false; }
+}
+
+async function startReminders() {
+  const r = parseInterval($('interval').value);
+  if (!r.ok) { updatePreview(); $('interval').focus(); if (r.empty) { $('preview').textContent = r.error; $('preview').classList.add('err'); } return; }
+  notice('');
+  if (NATIVE) { if (!await scheduleNative(r.minutes)) return; }
+  else {
+    const p = await webPermission();
+    if (p === 'denied') notice('Notifications are blocked for this website. You will still get a sound and a message here while the page is open.');
+    else if (p === 'unsupported') notice('This browser cannot show notifications. You will get a sound and a message here while the page is open.');
+    else notice('On the website, reminders arrive while this page stays open. For reminders all day, use the Android app.');
+  }
+  S.interval = r.minutes; S.running = true; S.nextAt = Date.now() + r.minutes * 60000; save(); render();
+  toast('💧 Reminders on: every ' + describe(r.minutes));
+}
+async function stopReminders() {
+  S.running = false; save(); if (NATIVE) await cancelNative(); notice(''); render();
+}
+$('startBtn').onclick = () => { S.running ? stopReminders() : startReminders(); };
+
+function remind(silentNative) {
+  const msg = pickMessage();
+  chime(); toast(msg[0] + '  ' + msg[1]);
+  if (!NATIVE) showWebNotification(msg[0], msg[1]);        // on the Android app the phone itself shows the notification
+}
+function tick() {
+  if (S.day !== today()) render();
+  if (S.running) {
+    const now = Date.now();
+    if (now >= S.nextAt) {
+      const late = now - S.nextAt;
+      if (!NATIVE || late < 5000) remind();
+      const step = S.interval * 60000;
+      S.nextAt += Math.ceil((now - S.nextAt + 1) / step) * step;       // jump to the next time in the pattern
+      save();
+    }
+    renderStatus();
+  }
+}
+setInterval(tick, 500);
+
+// when the Android app is opened again, top up the planned reminders so they never run out
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden || !NATIVE || !S.running) return;
+  try {
+    const pend = await LN().getPending();
+    if (pend.notifications.length < MAX_PENDING / 2) await scheduleNative(S.interval, S.nextAt);
+  } catch (e) {}
+  tick();
+});
+
+$('testBtn').onclick = async () => {
+  if (NATIVE) {
+    const plugin = LN(); if (!plugin) return;
+    let perm = await plugin.checkPermissions(); if (perm.display !== 'granted') perm = await plugin.requestPermissions();
+    if (perm.display !== 'granted') { notice('Please allow notifications in your phone settings.'); return; }
+    try { await plugin.createChannel({ id: CH, name: 'Water reminders', description: 'Reminders to drink water', importance: 4, visibility: 1, vibration: true }); } catch (e) {}
+    const m = pickMessage();
+    await plugin.schedule({ notifications: [{ id: 100000, title: m[0], body: m[1], channelId: CH, smallIcon: 'ic_stat_water', schedule: { at: new Date(Date.now() + 2000), allowWhileIdle: true } }] });
+    toast('A test reminder is coming in 2 seconds…');
+  } else {
+    const p = await webPermission(); const m = pickMessage();
+    chime(); toast(m[0] + '  ' + m[1]);
+    if (p === 'granted') showWebNotification(m[0], m[1]); else notice('Allow notifications for this website to see them on your screen.');
+  }
+};
+
+// ====================== Install and offline (website only) ======================
+let installEvt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('installBtn').style.display = 'inline-block'; });
+window.addEventListener('appinstalled', () => { installEvt = null; $('installBtn').style.display = 'none'; });
+$('installBtn').onclick = async () => { if (!installEvt) return; installEvt.prompt(); try { await installEvt.userChoice; } catch (e) {} installEvt = null; $('installBtn').style.display = 'none'; };
+if (!NATIVE && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+}
+
+// ====================== Start ======================
+if (S.text) $('interval').value = S.text;
+else if (S.interval) $('interval').value = describe(S.interval).replace(' hours', 'h').replace(' hour', 'h');
+if (S.running && S.nextAt < Date.now()) { const step = S.interval * 60000; S.nextAt += Math.ceil((Date.now() - S.nextAt + 1) / step) * step; }   // the page was closed for a while: carry on with the same pattern
+render(); updatePreview();
+</script>
+</body>
+</html>
