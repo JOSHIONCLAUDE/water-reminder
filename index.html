@@ -168,6 +168,18 @@ function tone(f1, f2, dur, vol) {
 }
 const blub = () => { tone(380, 760, 0.16, 0.14); setTimeout(() => tone(520, 900, 0.14, 0.1), 120); };
 const chime = () => [659, 784, 988].forEach((f, i) => setTimeout(() => tone(f, f, 0.35, 0.12), i * 140));
+// ten water drops: the reminder sound (the Android app plays the same sound from water_drops.wav)
+const DROP_AT = [0.05, 0.5, 0.93, 1.45, 1.9, 2.42, 2.85, 3.4, 3.88, 4.4], DROP_F = [920, 780, 1050, 860, 1180, 700, 980, 820, 1100, 640];
+function dropAt(t, f0, amp) {
+  const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f0 * 2.6, t + 0.05);
+  g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(amp, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.17);
+  const o2 = ac.createOscillator(), g2 = ac.createGain(); o2.type = 'sine'; o2.frequency.setValueAtTime(f0 * 1.5, t); o2.frequency.exponentialRampToValueAtTime(f0 * 3.9, t + 0.05); g2.gain.setValueAtTime(0.0001, t); g2.gain.linearRampToValueAtTime(amp * 0.3, t + 0.004); g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+  o.connect(g); g.connect(ac.destination); o2.connect(g2); g2.connect(ac.destination); o.start(t); o.stop(t + 0.22); o2.start(t); o2.stop(t + 0.15);
+}
+function drops10() {
+  if (!S.sound) return;
+  try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); const t = ac.currentTime + 0.03; DROP_AT.forEach((d, i) => dropAt(t + d, DROP_F[i], 0.2)); } catch (e) {}
+}
 
 // ====================== Screen ======================
 let toastTimer = 0;
@@ -213,7 +225,7 @@ $('drinkBtn').onclick = () => {
 $('undoBtn').onclick = () => { if (S.count > 0) { S.count--; save(); render(); } };
 
 // ====================== Reminders ======================
-const CH = 'water-reminders', MAX_PENDING = 240;
+const CH = 'water-drops', MAX_PENDING = 240, DROPS_SOUND = 'water_drops.wav';
 
 // Android app: schedule the next reminders with the phone's alarm system, so they arrive even when the app is closed.
 async function scheduleNative(mins, firstAt) {
@@ -221,13 +233,13 @@ async function scheduleNative(mins, firstAt) {
   let perm = await plugin.checkPermissions();
   if (perm.display !== 'granted') perm = await plugin.requestPermissions();
   if (perm.display !== 'granted') { notice('Please allow notifications in your phone settings, or reminders cannot show up.'); return false; }
-  try { await plugin.createChannel({ id: CH, name: 'Water reminders', description: 'Reminders to drink water', importance: 4, visibility: 1, vibration: true }); } catch (e) {}
+  try { await plugin.createChannel({ id: CH, name: 'Water reminders', description: 'Reminders to drink water (10 water drops sound)', importance: 4, visibility: 1, vibration: true, sound: DROPS_SOUND }); } catch (e) {}
   try { const pend = await plugin.getPending(); if (pend.notifications && pend.notifications.length) await plugin.cancel({ notifications: pend.notifications }); } catch (e) {}
   const notifications = [];
   let at = firstAt || (Date.now() + mins * 60000);
   for (let i = 0; i < MAX_PENDING; i++) {
     const msg = pickMessage();
-    notifications.push({ id: i + 1, title: msg[0], body: msg[1], channelId: CH, smallIcon: 'ic_stat_water', schedule: { at: new Date(at), allowWhileIdle: true } });
+    notifications.push({ id: i + 1, title: msg[0], body: msg[1], channelId: CH, sound: DROPS_SOUND, smallIcon: 'ic_stat_water', isExactNotification: false, schedule: { at: new Date(at), allowWhileIdle: true } });
     at += mins * 60000;
   }
   await plugin.schedule({ notifications });
@@ -272,7 +284,7 @@ $('startBtn').onclick = () => { S.running ? stopReminders() : startReminders(); 
 
 function remind(silentNative) {
   const msg = pickMessage();
-  chime(); toast(msg[0] + '  ' + msg[1]);
+  drops10(); toast(msg[0] + '  ' + msg[1]);
   if (!NATIVE) showWebNotification(msg[0], msg[1]);        // on the Android app the phone itself shows the notification
 }
 function tick() {
@@ -306,13 +318,13 @@ $('testBtn').onclick = async () => {
     const plugin = LN(); if (!plugin) return;
     let perm = await plugin.checkPermissions(); if (perm.display !== 'granted') perm = await plugin.requestPermissions();
     if (perm.display !== 'granted') { notice('Please allow notifications in your phone settings.'); return; }
-    try { await plugin.createChannel({ id: CH, name: 'Water reminders', description: 'Reminders to drink water', importance: 4, visibility: 1, vibration: true }); } catch (e) {}
+    try { await plugin.createChannel({ id: CH, name: 'Water reminders', description: 'Reminders to drink water (10 water drops sound)', importance: 4, visibility: 1, vibration: true, sound: DROPS_SOUND }); } catch (e) {}
     const m = pickMessage();
-    await plugin.schedule({ notifications: [{ id: 100000, title: m[0], body: m[1], channelId: CH, smallIcon: 'ic_stat_water', schedule: { at: new Date(Date.now() + 2000), allowWhileIdle: true } }] });
+    await plugin.schedule({ notifications: [{ id: 100000, title: m[0], body: m[1], channelId: CH, sound: DROPS_SOUND, smallIcon: 'ic_stat_water', isExactNotification: false, schedule: { at: new Date(Date.now() + 2000), allowWhileIdle: true } }] });
     toast('A test reminder is coming in 2 seconds…');
   } else {
     const p = await webPermission(); const m = pickMessage();
-    chime(); toast(m[0] + '  ' + m[1]);
+    drops10(); toast(m[0] + '  ' + m[1]);
     if (p === 'granted') showWebNotification(m[0], m[1]); else notice('Allow notifications for this website to see them on your screen.');
   }
 };
